@@ -1,0 +1,282 @@
+origl_NFT  // original NFT
+	//the tokenId of the original NFT
+	tokenId orig_tokenId 
+    
+    // transfer the token with tokenId from “address from” to “address to”
+	func transferFrom(address from, address to, tokenId)
+    
+    // approve “address operator” for the token caller 
+	func setApprovalForAll(address operator, boolean)
+    
+    // set the current user to “address user” with an expired time in “uint expire_time”
+	func setUser(address user, uint expire_time) 
+
+voucher_NFT // voucher NFT(redeem)
+	// valid period starts from
+    uint64 start 
+
+    // valid period end at
+    uint64 end 
+	
+    // the tokenId of the voucher NFT
+    tokenId voucher_tokenId 	
+
+    //return the tokenURI for the voucher NFT
+    func tokenURI(tokenID) 
+	
+    // transfer the token from “address from” to “address to”
+    func transferFrom(address from, address to)
+    
+    // set the address NFT belongs to address owner 
+    func mintTo(address owner, address NFT)
+
+    // set the duration of the voucher NFT from start date to end date 
+    func setDuration(unit64 start_date, unit64 end_date)
+
+    // ERC-20 contracts build in function -> destroy the whole token
+    func _burn(tokenId) 
+
+wrapped_NFT // wrapped NFT in ERC 4907
+	// the tokenId of the wrapped NFT
+	tokenId wrapped_tokenId 
+	
+    // transfer the token from “address from” to “address to”
+	func transferFrom(address from, address to) 
+	
+
+rent_NFT // contract for NFT renting in ERC-4907
+	// the tokenId of the rent NFT 
+	tokenId rent_tokenId 
+	
+    // transfer the token from “address from” to “address to”
+	func transferFrom(address from, address to) 
+	
+    // create a new voucher_NFT which can redeem the original_NFT with tokenId
+    func mint_voucher_NFT(tokenId) 
+	
+    // create a new wrapped_NFT for extending the ERC 721 to ERC 4907 from the original_NFT with tokenId
+    func mint_wrapped_NFT(tokenId)
+
+    // redeem the voucher_NFT_token 
+    func rent_NFT.redeem(voucher_tokenId)
+
+instal_NFT // contract for NFT instalment services in ERC-4907
+ 	// the tokenId of the rent NFT 
+	tokenId rent_tokenId 
+	
+    // transfer the token from “address from” to “address to”
+	func transferFrom(address from, address to) 
+	
+    // create a new voucher_NFT which can redeem the original_NFT with tokenId
+    func mint_voucher_NFT(tokenId) 
+	
+    // create a new wrapped_NFT for extending the ERC 721 to ERC 4907 from the original_NFT with tokenId
+    func mint_wrapped_NFT(tokenId)
+
+    // redeem the voucher_NFT_token 
+    func redeem(voucher_tokenId)
+
+Platform // our platform 
+	//set the renting condition
+    func createLendOrder(price, duration [start date, end date]) //create the lend order
+	
+    // ensure the renter has selects rental duration and the NFT is available now
+	func fulfilOrder(duration = [start date, end date])
+
+    // for renter to pay , return TRUE if the renter has paid
+    func checkPaid() 
+
+    // to pay the lender with renting fee
+    func payLender()
+
+    // request for the instalment buying services on a NFT with tokenId 
+    func instalmentRequest(tokenId)
+    
+    // verify the transaction (e.g. risk, volatility)
+    func checkValid(transaction number)
+    
+    // reject the instalment request from the user
+    func rejectInstalment()
+    
+    // select the instalment period for the borrower
+    func instalmentPeriod()
+    
+    // add the NFT to our platform NFT list 
+    func addAsset(NFT)
+
+
+
+
+Function Lending() 
+
+    IF contract_standard = ERC-4907
+        // lender approves rent_NFT contract to transfer the orig_NFT
+        Lender -> orig_NFT.setApprovalForAll(rent_NFT, True)  
+        
+        // owner of the orig_NFT becomes rent_NFT_sol
+        rent_NFT -> orig_NFT.transferFrom(lender, rent_NFT, orig_tokenId)
+        
+        // the rent_NFT contract creates a new voucher_NFT for redemption
+        rent_NFT.mint_voucher_NFT(orig_tokenId, v_end = max(uint64))
+        voucher_tokenURI = tokenURI(voucher_tokenID)
+        
+        // a voucher_NFT token is minted for the lender to redeem the orig_NFT
+        voucher_NFT.mintTo(Lender, voucher_tokenURI) 		
+        
+        // Lender is set to be the current user before anyone rents it
+        rent_NFT -> orig_NFT.setUser(orig_tokenId, Lender, max(uint64)) 
+        EMIT event UpdateUser(orig_tokenId, lender, expires = max(uint64))
+
+    ELSE 
+        // lender approves rent_NFT contract to transfer the original_NFT token
+        Lender -> original_NFT.setApprovalForAll(rent_NFT, True) 		
+        
+        //the rent_NFT creates a new wrapped_NFT, where wrapped_tokenId = orig_tokenId
+        wrapped_tokenId = rent_NFT.mint_wrapped_NFT(orig_tokenId) 		
+        
+        // owner of the orig_NFT becomes the wrapped_NFT 
+        rent_NFT -> orig_NFT.transferFrom(lender, wrapped_NFT, orig_tokenId)  		
+        
+        // owner of the wrapped_NFT becomes the rent_NFT contract
+        wrapped_NFT.transferFrom(wrapped_NFT, rent_NFT, wrapped_tokenId)
+        
+        //  a voucher_NFT token is minted for the lender to redeem the original_NFT
+        rent_NFT.mint_voucher_NFT(orig_tokenId, v_end = max(uint64))
+        voucher_tokenURI = tokenURI(voucher_tokenID)
+        voucher_NFT.mintTo(Lender, voucher_tokenURI)     		
+        
+        // Lender is set to be the current user
+        rent_NFT -> wrapped_NFT.setUser(wrapped_tokenId, Lender, max(uint64)) 
+        EMIT event UpdateUser(wrapped_tokenId, renter, expires = max(uint64))
+        
+    END IF
+
+    THEN Lender -> Platform.createLendOrder(price, duration = [lend_start, lend_end])
+
+
+
+Function Renting()
+    //ensure the renter has selects rental duration and the NFT is available now
+    Renter -> Platform.fulfilOrder(duration=[rent_start, rent_end])
+    
+    //check whether the renter has paid us the renting fee
+    IF Platform.checkPaid() = TRUE 
+        //rent_NFT contract mints a new rent_NFT token for duration [rent_start, rent_end] for the renter
+        rent_tokenURI = tokenURI(rent_NFT.mint_rent_NFT(orig_tokenId, [rent_start, rent_end]) )
+        rent_NFT.mintTo(renter, rent_tokenURI)
+        
+        //Renter is set to be the current user
+        rent_NFT -> orig_NFT.setUser(orig_tokenId, Renter, rent_end)
+        EMIT event UpdateUser(orig_tokenId, renter, expires = rent_end)
+        
+        //Ensure that the owner can only redeem the NFT after the renter returns the NFT
+        voucher_NFT.setDuration(rent_end, max(uint64))
+        
+        //Platform transfers rent to Lender and allocate fees in a give proportion
+        Platform.PayLender()
+
+    END IF
+
+
+
+Function Redeem() 
+    Lender -> rent_NFT.redeem(voucher_tokenId)
+    
+    // check if the orig_NFT is available to be redeemed at current timestamp
+    // orig_NFT is rented by someone and is not available for redemption yet
+    IF voucher_NFT.start > unixTimestamp(now)
+        RETURN FALSE	
+    
+    // orig_NFT is available for redemption
+    ELSE 
+        // burn the voucher_NFT of the corresponding orig_NFT
+        _burn(voucher_tokenId) 
+        
+        // transfer back the ownership of the orig_NFT to lender
+        rent_NFT -> orig_NFT.transferFrom(rent_NFT, lender, orig_tokenId)
+        EMIT event UpdateUser(orig_tokenId, lender, expires = max(uint64))
+    
+    END IF
+    
+    
+
+Function Instalment()
+    //The buyer request for the instalment buying services on a NFT 
+    Buyer -> transaction_no = Platform.instalmentRequest(orig_tokenID)
+    
+    // Platform check whether the transaction is valid i.e. available for instalment
+    IF Platform.checkValid(transaction_no) = True 		
+        // check if the orig_NFT is available to be redeemed at current timestamp
+        // orig_NFT is rented by someone and is not available for redemption yet
+        IF voucher_NFT.start > unixTimestamp(now)
+        
+            //someone is renting the NFT -> reject instalment buying
+            return Platform.rejectInstalment()
+
+        //orig_NFT is available for instalment buying
+        ELSE
+
+            //Buyer choose the paying period for instalment (e.g 12 = 12 months instalment paying)						
+            Buyer -> Platform.instalmentPeriod()				
+            //Check whether the buyer has paid for the 1st month repayment
+            IF Platform.checkPaid() = TRUE
+
+                // we help the buyer full pay first and ownership of the NFT belongs to platform
+                Platform.PaySeller()
+                instal_NFT -> orig_NFT.transferFrom(seller, Platform, orig_tokenId)
+                EMIT event UpdateUser(orig_tokenId, Platform, expires = max(uint64))
+
+                //Now the NFT products belong to the platform, we can now prepare for lending the NFT
+                instal_NFT.mint_voucher_NFT(orig_tokenId, v_end = max(uint64))
+                voucher_tokenURI = tokenURI(voucher_tokenID)
+
+                // a voucher_NFT token is minted for the platform to redeem the orig_NFT
+                voucher_NFT.mintTo(Platform, voucher_tokenURI) 		
+
+                //let the buyer to rent the NFT each month if he pays the repayment during the period
+                SET instal_NFT_months = 0 
+                WHILE instal_NFT_months < instalmentPeriod()
+                    IF Platform.checkPaid() = TRUE
+
+                        // Buyer -> Renting()
+                        rent_tokenURI = tokenURI(instal_NFT.mint_rent_NFT(orig_tokenId, 
+                        [now,now+1month]))
+                        rent_NFT.mintTO(buyer, rent_tokenURI)
+
+                        //Buyer is set to be the current user
+                        instal_NFT -> orig_NFT.setUser(orig_tokenId, Buyer, now+1month)
+                        EMIT event UpdateUser(orig_tokenId, buyer, expires = now+1month)
+                        instal_NFT_month++
+                    
+                    ELSE
+                    
+                        RETURN
+                        
+                    ENDIF
+                    
+                END WHILE
+
+                //after the repayment period
+                
+                //if the buyer clear all his repayment
+                IF instal_NFT_months = instalmentPeriod
+                    instal_NFT -> voucher_NFT.transferFrom(Platform, buyer, voucher_tokenId)
+                    Buyer -> instal_NFT.redeem(voucher_tokenId)
+
+                    // burn the voucher_NFT of the corresponding orig_NFT
+                    _burn(voucher_tokenId)
+
+                    // transfer the ownership of the orig_NFT to Buyer
+                    instal_NFT -> orig_NFT.trasnferFrom(Platform, Buyer, orig_tokenId)
+                    EMIT event UpdateUser(orig_tokenId, Buyer, expires = max(uint64))
+
+                //if the buyer did not clear all his repayment, the NFT belongs to platform assets
+                ELSE
+                    Platform.addAsset(orig_NFT)
+                END IF
+    
+    ELSE 	
+        // the transaction is not valid (e.g. volatility of this NFT is low)-> reject instalment buying
+        Platform.rejectInstalment()
+    END IF
+
